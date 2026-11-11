@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../Context/AuthContext";
+import { apiFetch } from "../api";
 
 export default function Register() {
   const [role, setRole] = useState("seeker");
@@ -21,12 +22,18 @@ export default function Register() {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
       await updateProfile(cred.user, { displayName: name.trim() });
-      login({ name: name.trim() || email.split("@")[0], email: cred.user.email, role });
-      navigate(role === "seeker" ? "/dashboard" : "/employer");
+      // Save the profile (name + role) in our database
+      const { user } = await apiFetch("/api/auth/sync", {
+        method: "POST",
+        body: { name: name.trim(), role },
+      });
+      login({ name: user.name, email: user.email, role: user.role });
+      navigate(user.role === "employer" ? "/employer" : "/dashboard");
     } catch (err) {
       if (err.code === "auth/email-already-in-use") setError("This email is already used.");
       else if (err.code === "auth/weak-password") setError("Password must be at least 6 characters.");
-      else setError("Could not create the account. Check the details.");
+      else if (err.code) setError("Could not create the account. Check the details.");
+      else setError(err.message);
     } finally {
       setLoading(false);
     }

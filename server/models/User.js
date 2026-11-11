@@ -4,7 +4,9 @@ const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true }, // save a HASHED password (bcrypt), never plain text
+    // Firebase handles passwords now, so we no longer store one here.
+    password: { type: String },
+    firebaseUid: { type: String, index: true },
     role: { type: String, enum: ["Job Seeker", "Employer", "Admin"], default: "Job Seeker" },
     status: { type: String, enum: ["Active", "Suspended"], default: "Active" },
 

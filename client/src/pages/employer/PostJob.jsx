@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/Admin/PageHeader";
 import { btn } from "../../components/Admin/styles";
 import { jobTypes } from "../../data/EmployerData";
-import { API_URL } from "../../api";
+import { apiFetch } from "../../api";
 import { useAuth } from "../../Context/AuthContext";
 
 const inputCls =
@@ -34,10 +34,9 @@ export default function PostJob() {
     setSaving(true);
     setSaveError("");
     try {
-      const res = await fetch(`${API_URL}/api/jobs`, {
+      await apiFetch("/api/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: {
           title: form.title,
           type: form.type,
           location: form.location,
@@ -45,14 +44,11 @@ export default function PostJob() {
           salaryMax: form.salaryMax ? Number(form.salaryMax) : undefined,
           description: form.description,
           requirements: form.requirements,
-          companyName: user?.name || "Employer",
-          postedByEmail: user?.email || "",
-        }),
+        },
       });
-      if (!res.ok) throw new Error("Could not save the job");
       setSubmitted(true);
     } catch (err) {
-      setSaveError("Could not save the job. Is the server running?");
+      setSaveError(err.message || "Could not save the job. Is the server running?");
     } finally {
       setSaving(false);
     }

@@ -4,10 +4,8 @@ import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../Context/AuthContext";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
-
-// Demo admin account (replace with real backend auth later)
-const ADMIN_EMAIL = "admin@jobhub.com";
-const ADMIN_PASSWORD = "admin123";
+import { apiFetch } from "../api";
+import { signOut } from "firebase/auth";
 
 const HOME = {
   seeker: "/dashboard",
@@ -30,27 +28,29 @@ export default function Login() {
     e.preventDefault();
     setError("");
 
-    if (role === "admin") {
-      if (
-        email.trim().toLowerCase() !== ADMIN_EMAIL ||
-        password !== ADMIN_PASSWORD
-      ) {
-        setError("Invalid admin email or password.");
-        return;
-      }
-      login({ name: "Admin", email: ADMIN_EMAIL, role: "admin" });
-      navigate(HOME.admin);
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+    } catch {
+      setError("Wrong email or password.");
       return;
     }
 
     try {
-      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const displayName =
-        cred.user.displayName || name.trim() || email.split("@")[0] || "User";
-      login({ name: displayName, email: cred.user.email, role });
-      navigate(HOME[role]);
+      // Ask our server who this user really is (the role comes from the database)
+      const { user } = await apiFetch("/api/auth/sync", {
+        method: "POST",
+        body: { name: name.trim(), role },
+      });
+      if (user.role !== role) {
+        await signOut(auth);
+        setError(`This is a ${user.role} account. Choose the right tab above.`);
+        return;
+      }
+      login({ name: user.name, email: user.email, role: user.role });
+      navigate(HOME[user.role]);
     } catch (err) {
-      setError("Wrong email or password.");
+      await signOut(auth);
+      setError(err.message);
     }
   };
 

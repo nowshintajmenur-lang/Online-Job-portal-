@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { signOut } from "firebase/auth";
+import { auth } from "../firebase";
 
 const AuthContext = createContext(null);
 
@@ -17,7 +19,10 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   const login = (userData) => setUser(userData);
-  const logout = () => setUser(null);
+  const logout = () => {
+    signOut(auth);
+    setUser(null);
+  };
   const updateUser = (changes) => setUser((prev) => ({ ...prev, ...changes }));
 
   return (

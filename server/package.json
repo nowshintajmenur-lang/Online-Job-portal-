@@ -4,12 +4,14 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
+    "dev": "node --watch index.js",
     "test-db": "node testDb.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "jose": "^5.9.6",
     "mongoose": "^8.5.0"
   }
 }
