@@ -224,6 +224,29 @@ if ($AdminEmail -and $AdminPassword) {
   Write-Host "`n(Admin tests skipped. Run with -AdminEmail and -AdminPassword to test them.)" -ForegroundColor Yellow
 }
 
+Write-Host "`n== Messages ==" -ForegroundColor Cyan
+$r = Call "POST" "/api/messages" $seekTok @{ to = $seekerId; text = "hi" }
+Check "cannot message yourself -> 400" ($r.status -eq 400)
+$r = Call "GET" "/api/messages" $seekTok $null
+$emp = @($r.data) | Select-Object -First 1
+Check "seeker sees employer in conversation list" ($r.status -eq 200 -and $emp)
+if ($emp) {
+  $empId = $emp.userId
+  $r = Call "POST" "/api/messages" $seekTok @{ to = $empId; text = "Hello, I applied for your job" }
+  Check "seeker sends message" ($r.status -eq 201 -or $r.status -eq 200)
+  $r = Call "GET" "/api/messages" $empTok $null
+  $row = @($r.data) | Where-Object { $_.userId -eq $seekerId }
+  Check "employer sees unread message" ($r.status -eq 200 -and $row -and $row.unread -ge 1)
+  $r = Call "GET" "/api/messages/$seekerId" $empTok $null
+  Check "employer reads thread" ($r.status -eq 200 -and @($r.data).Count -ge 1)
+  $r = Call "POST" "/api/messages" $empTok @{ to = $seekerId; text = "Thanks, let's talk" }
+  Check "employer replies" ($r.status -eq 201 -or $r.status -eq 200)
+  $r = Call "POST" "/api/messages" $empTok @{ to = $seekerId; text = "   " }
+  Check "empty message -> 400" ($r.status -eq 400)
+}
+$r = Call "GET" "/api/messages" $null $null
+Check "messages need login -> 401" ($r.status -eq 401)
+
 Write-Host "`n== Clean up ==" -ForegroundColor Cyan
 $r = Call "DELETE" "/api/jobs/$createdJobId" $empTok $null
 Check "employer deletes the job" ($r.status -eq 200)

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Heart, MapPin, ExternalLink, HeartOff } from "lucide-react";
 import { getSavedJobs, removeJob } from "../../utils/savedJobs";
+import { apiFetch } from "../../api";
 
 function typeStyle(type) {
   switch (type) {
@@ -17,19 +18,57 @@ export default function SavedJobs() {
   const [saved, setSaved] = useState([]);
 
   useEffect(() => {
-    setSaved(getSavedJobs());
+    const local = getSavedJobs();
+    setSaved(local);
+    const typeMap = { "Full-time": "Full Time", "Part-time": "Part Time" };
+    apiFetch("/api/saved")
+      .then((rows) => {
+        const fromDb = rows.map(({ job: j }) => ({
+          id: `db-${j._id}`,
+          title: j.title,
+          company: j.companyName || "Employer",
+          location: j.location,
+          type: typeMap[j.type] || j.type,
+          salary:
+            j.salaryMin || j.salaryMax
+              ? `TK ${j.salaryMin || "?"} - ${j.salaryMax || "?"}/month`
+              : "Not specified",
+          letter: (j.companyName || "E").charAt(0).toUpperCase(),
+          tags: [],
+          isReal: false,
+        }));
+        setSaved([...fromDb, ...local.filter((l) => !String(l.id).startsWith("db-"))]);
+      })
+      .catch(() => {});
   }, []);
 
-  function handleRemove(id) {
-    const updated = removeJob(id);
-    setSaved(updated);
+  async function handleRemove(id) {
+    if (String(id).startsWith("db-")) {
+      try {
+        await apiFetch("/api/saved/" + id.slice(3), { method: "DELETE" });
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+      setSaved((prev) => prev.filter((j) => j.id !== id));
+      return;
+    }
+    removeJob(id);
+    setSaved((prev) => prev.filter((j) => j.id !== id));
   }
 
-  function handleApply(job) {
+  async function handleApply(job) {
     if (job.isReal && job.applyUrl) {
       window.open(job.applyUrl, "_blank", "noopener,noreferrer");
+    } else if (String(job.id).startsWith("db-")) {
+      try {
+        await apiFetch("/api/applications", { method: "POST", body: { jobId: job.id.slice(3) } });
+        alert(`Application sent for "${job.title}"!`);
+      } catch (err) {
+        alert(err.message);
+      }
     } else {
-      alert(`Application submitted for "${job.title}" (demo only, no backend connected yet).`);
+      alert(`"${job.title}" is a demo job, so it cannot be applied here.`);
     }
   }
 

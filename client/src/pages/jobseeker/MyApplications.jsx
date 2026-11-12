@@ -1,48 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Building2, Calendar, ExternalLink } from "lucide-react";
+import { apiFetch } from "../../api";
 
-const MOCK_APPLICATIONS = [
-  {
-    id: "1",
-    jobTitle: "Senior Frontend Engineer",
-    company: "Northbridge",
-    dateApplied: "Sep 17, 2026",
-    status: "Reviewing",
-    letter: "N",
-  },
-  {
-    id: "2",
-    jobTitle: "Product Designer",
-    company: "Chattogram Labs",
-    dateApplied: "Sep 15, 2026",
-    status: "Applied",
-    letter: "C",
-  },
-  {
-    id: "3",
-    jobTitle: "Backend Engineer (Node.js)",
-    company: "CloudNine",
-    dateApplied: "Sep 13, 2026",
-    status: "Interview",
-    letter: "C",
-  },
-  {
-    id: "4",
-    jobTitle: "UI/UX Designer",
-    company: "DesignHub",
-    dateApplied: "Aug 20, 2026",
-    status: "Rejected",
-    letter: "D",
-  },
-  {
-    id: "5",
-    jobTitle: "Marketing Manager",
-    company: "Dhaka Retail",
-    dateApplied: "Aug 5, 2026",
-    status: "Hired",
-    letter: "D",
-  },
-];
+const STATUS_MAP = {
+  Applied: "Applied",
+  "Under Review": "Reviewing",
+  Shortlisted: "Reviewing",
+  Interview: "Interview",
+  Selected: "Hired",
+  Rejected: "Rejected",
+};
 
 const STATUS_TABS = ["All", "Applied", "Reviewing", "Interview", "Rejected", "Hired"];
 
@@ -66,8 +33,33 @@ function statusStyle(status) {
 export default function MyApplications() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("All");
+  const [apps, setApps] = useState([]);
+  const [error, setError] = useState("");
 
-  const filtered = MOCK_APPLICATIONS.filter((app) => {
+  useEffect(() => {
+    apiFetch("/api/applications/mine")
+      .then((rows) =>
+        setApps(
+          rows
+            .filter((a) => a.job)
+            .map((a) => ({
+              id: a._id,
+              jobTitle: a.job.title,
+              company: a.job.companyName || "Employer",
+              dateApplied: new Date(a.createdAt).toLocaleDateString([], {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }),
+              status: STATUS_MAP[a.status] || "Applied",
+              letter: (a.job.companyName || "E").charAt(0).toUpperCase(),
+            }))
+        )
+      )
+      .catch((e) => setError(e.message));
+  }, []);
+
+  const filtered = apps.filter((app) => {
     const matchesSearch =
       app.jobTitle.toLowerCase().includes(search.toLowerCase()) ||
       app.company.toLowerCase().includes(search.toLowerCase());
@@ -78,8 +70,8 @@ export default function MyApplications() {
   const counts = STATUS_TABS.reduce((acc, tab) => {
     acc[tab] =
       tab === "All"
-        ? MOCK_APPLICATIONS.length
-        : MOCK_APPLICATIONS.filter((a) => a.status === tab).length;
+        ? apps.length
+        : apps.filter((a) => a.status === tab).length;
     return acc;
   }, {});
 
@@ -89,6 +81,7 @@ export default function MyApplications() {
       <p style={{ color: "#6B7280", marginBottom: "1.5rem" }}>
         Track the status of jobs you've applied to.
       </p>
+      {error && <p style={{ color: "#DC2626", marginBottom: "1rem" }}>{error}</p>}
 
       {/* Summary stat strip */}
       <div

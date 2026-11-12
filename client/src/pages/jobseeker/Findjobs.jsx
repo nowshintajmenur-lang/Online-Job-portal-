@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Search, MapPin, Heart, Loader2, ExternalLink } from "lucide-react";
 import { getSavedJobs, toggleSavedJob } from "../../utils/savedJobs";
-import { API_URL } from "../../api";
+import { API_URL, apiFetch } from "../../api";
 
 const MOCK_JOBS = [
   {
@@ -106,6 +106,23 @@ export default function FindJobs() {
   const [locationFilter, setLocationFilter] = useState("All Locations");
   const [savedIds, setSavedIds] = useState(() => getSavedJobs().map((j) => j.id));
   const [appliedIds, setAppliedIds] = useState([]);
+  const [notice, setNotice] = useState("");
+
+  // Load what this seeker already applied to / saved (database jobs only)
+  useEffect(() => {
+    async function loadMine() {
+      try {
+        const apps = await apiFetch("/api/applications/mine");
+        setAppliedIds(apps.filter((a) => a.job).map((a) => `db-${a.job._id}`));
+        const saved = await apiFetch("/api/saved");
+        const ids = saved.map((s) => `db-${s.job._id}`);
+        setSavedIds((prev) => [...new Set([...prev, ...ids])]);
+      } catch (err) {
+        // not logged in as a seeker: ignore
+      }
+    }
+    loadMine();
+  }, []);
 
   const [apiJobs, setApiJobs] = useState([]);
   const [dbJobs, setDbJobs] = useState([]);
@@ -223,21 +240,40 @@ export default function FindJobs() {
     return matchesSearch && matchesType && matchesLocation;
   });
 
-  function toggleSave(job) {
-    toggleSavedJob(job);
-    setSavedIds((prev) =>
-      prev.includes(job.id) ? prev.filter((x) => x !== job.id) : [...prev, job.id]
-    );
+  async function toggleSave(job) {
+    const wasSaved = savedIds.includes(job.id);
+    if (job.id.startsWith("db-")) {
+      try {
+        const realId = job.id.slice(3);
+        await apiFetch("/api/saved/" + realId, { method: wasSaved ? "DELETE" : "POST" });
+      } catch (err) {
+        setNotice(err.message);
+        return;
+      }
+    } else {
+      toggleSavedJob(job);
+    }
+    setSavedIds((prev) => (wasSaved ? prev.filter((x) => x !== job.id) : [...prev, job.id]));
   }
 
-  function handleApply(job) {
+  async function handleApply(job) {
     if (job.isReal && job.applyUrl) {
       window.open(job.applyUrl, "_blank", "noopener,noreferrer");
       return;
     }
-    if (!appliedIds.includes(job.id)) {
-      setAppliedIds((prev) => [...prev, job.id]);
+    if (appliedIds.includes(job.id)) return;
+    if (job.id.startsWith("db-")) {
+      try {
+        await apiFetch("/api/applications", { method: "POST", body: { jobId: job.id.slice(3) } });
+        setNotice("Application sent!");
+      } catch (err) {
+        if (!/already/i.test(err.message)) {
+          setNotice(err.message);
+          return;
+        }
+      }
     }
+    setAppliedIds((prev) => [...prev, job.id]);
   }
 
   const selectStyle = {
@@ -374,6 +410,9 @@ export default function FindJobs() {
           <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
           Loading live job listings...
         </div>
+      )}
+      {notice && (
+        <p style={{ color: "#2563EB", fontSize: "0.85rem", marginBottom: "1rem" }}>{notice}</p>
       )}
       {error && (
         <p style={{ color: "#B45309", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>

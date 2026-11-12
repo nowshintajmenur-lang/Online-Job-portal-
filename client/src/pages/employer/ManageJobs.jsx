@@ -1,14 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageHeader from "../../components/Admin/PageHeader";
 import AdminToolbar from "../../components/Admin/AdminToolbar";
 import StatusBadge from "../../components/Admin/StatusBadge";
 import { btn, btnDanger, th, td } from "../../components/Admin/styles";
-import { employerJobs as initialJobs, jobTypes } from "../../data/EmployerData";
+import { jobTypes } from "../../data/EmployerData";
+import { apiFetch } from "../../api";
 import { MapPinIcon, ClockIcon, BriefcaseIcon, UsersIcon } from "../../components/Admin/icons";
 
+// "3d ago" style text from a date
+function timeAgo(date) {
+  const mins = Math.floor((Date.now() - new Date(date).getTime()) / 60000);
+  if (mins < 60) return `${Math.max(mins, 1)}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
 export default function ManageJobs() {
-  const [jobs, setJobs] = useState(initialJobs);
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Load my jobs from the server
+  useEffect(() => {
+    apiFetch("/api/jobs/mine")
+      .then(setJobs)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [type, setType] = useState("All");
@@ -20,16 +43,29 @@ export default function ManageJobs() {
       (j.title + j.location).toLowerCase().includes(search.toLowerCase())
   );
 
-  // Later: PATCH /api/v1/jobs/:id { status }
-  const toggle = (id) =>
-    setJobs((prev) =>
-      prev.map((j) => (j.id === id ? { ...j, status: j.status === "Open" ? "Closed" : "Open" } : j))
-    );
+  // Close or reopen a job
+  const toggle = async (job) => {
+    setError("");
+    try {
+      const updated = await apiFetch(`/api/jobs/${job._id}`, {
+        method: "PATCH",
+        body: { status: job.status === "Open" ? "Closed" : "Open" },
+      });
+      setJobs((prev) => prev.map((j) => (j._id === job._id ? { ...j, status: updated.status } : j)));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
-  // Later: DELETE /api/v1/jobs/:id
-  const remove = (id) => {
-    if (window.confirm("Remove this job posting? This cannot be undone.")) {
-      setJobs((prev) => prev.filter((j) => j.id !== id));
+  // Delete a job
+  const remove = async (id) => {
+    if (!window.confirm("Remove this job posting? This cannot be undone.")) return;
+    setError("");
+    try {
+      await apiFetch(`/api/jobs/${id}`, { method: "DELETE" });
+      setJobs((prev) => prev.filter((j) => j._id !== id));
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -40,6 +76,8 @@ export default function ManageJobs() {
           + Post a job
         </Link>
       </PageHeader>
+
+      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="rounded-xl border border-slate-200 bg-white">
         <AdminToolbar
@@ -66,12 +104,12 @@ export default function ManageJobs() {
             </thead>
             <tbody>
               {visible.map((j) => (
-                <tr key={j.id} className="border-t border-slate-100 transition-colors hover:bg-mist">
+                <tr key={j._id} className="border-t border-slate-100 transition-colors hover:bg-mist">
                   <td className={td}>
                     <p className="font-medium text-ink">{j.title}</p>
                     <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-400">
                       <ClockIcon className="h-3 w-3" />
-                      Posted {j.posted}
+                      Posted {timeAgo(j.createdAt)}
                     </p>
                   </td>
                   <td className={td + " text-slate-600"}>
@@ -95,10 +133,10 @@ export default function ManageJobs() {
                   <td className={td}><StatusBadge status={j.status} /></td>
                   <td className={td}>
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => toggle(j.id)} className={btn}>
+                      <button onClick={() => toggle(j)} className={btn}>
                         {j.status === "Open" ? "Close" : "Reopen"}
                       </button>
-                      <button onClick={() => remove(j.id)} className={btnDanger}>
+                      <button onClick={() => remove(j._id)} className={btnDanger}>
                         Remove
                       </button>
                     </div>
@@ -112,7 +150,7 @@ export default function ManageJobs() {
                       <circle cx="11" cy="11" r="8" />
                       <path d="m21 21-4.3-4.3" />
                     </svg>
-                    No jobs match your filters.
+                    {loading ? "Loading..." : jobs.length === 0 ? "You have not posted any jobs yet." : "No jobs match your filters."}
                   </td>
                 </tr>
               )}

@@ -10,6 +10,7 @@ import companyRoutes from "./routes/companies.js";
 import savedRoutes from "./routes/saved.js";
 import notificationRoutes from "./routes/notifications.js";
 import statsRoutes from "./routes/stats.js";
+import messageRoutes from "./routes/messages.js";
 
 const app = express();
 app.use(cors());
@@ -24,6 +25,7 @@ app.use("/api/companies", companyRoutes);
 app.use("/api/saved", savedRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/stats", statsRoutes);
+app.use("/api/messages", messageRoutes);
 
 // One place that turns any error into a JSON message
 app.use((err, req, res, next) => {

@@ -1,15 +1,35 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { apiFetch } from "../../api";
 import PageHeader from "../../components/Admin/PageHeader";
 import AdminToolbar from "../../components/Admin/AdminToolbar";
 import StatusBadge from "../../components/Admin/StatusBadge";
 import Avatar from "../../components/Admin/Avatar";
 import { th, td } from "../../components/Admin/styles";
-import { employerApplicants as initialApplicants, employerJobs, applicationStatuses } from "../../data/EmployerData";
+import { applicationStatuses } from "../../data/EmployerData";
 import { BriefcaseIcon, ClockIcon } from "../../components/Admin/icons";
 
 export default function ViewApplicants() {
-  const [applicants, setApplicants] = useState(initialApplicants);
+  const [applicants, setApplicants] = useState([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch("/api/applications/employer")
+      .then((rows) =>
+        setApplicants(
+          rows
+            .filter((r) => r.job && r.applicant)
+            .map((r) => ({
+              id: r._id,
+              name: r.applicant.name || r.applicant.email,
+              job: r.job.title,
+              applied: new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" }),
+              status: r.status,
+            }))
+        )
+      )
+      .catch((e) => setError(e.message));
+  }, []);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [job, setJob] = useState("All");
@@ -21,21 +41,29 @@ export default function ViewApplicants() {
       (a.name + a.job).toLowerCase().includes(search.toLowerCase())
   );
 
-  // Later: PATCH /api/v1/applications/:id { status }
-  const updateStatus = (id, next) =>
-    setApplicants((prev) => prev.map((a) => (a.id === id ? { ...a, status: next } : a)));
+  const updateStatus = async (id, next) => {
+    try {
+      await apiFetch("/api/applications/" + id, { method: "PATCH", body: { status: next } });
+      setApplicants((prev) => prev.map((a) => (a.id === id ? { ...a, status: next } : a)));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const jobTitles = [...new Set(applicants.map((a) => a.job))];
 
   return (
     <>
       <PageHeader title="View applicants" subtitle="Review candidates and move them through your hiring stages." />
 
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
       <div className="rounded-xl border border-slate-200 bg-white">
         <AdminToolbar
           search={search}
           onSearch={setSearch}
           placeholder="Search by applicant or job"
           filters={[
-            { label: "jobs", value: job, onChange: setJob, options: ["All", ...employerJobs.map((j) => j.title)] },
+            { label: "jobs", value: job, onChange: setJob, options: ["All", ...jobTitles] },
             { label: "statuses", value: status, onChange: setStatus, options: ["All", ...applicationStatuses] },
           ]}
         />

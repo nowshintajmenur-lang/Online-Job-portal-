@@ -1,111 +1,96 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, Send, Paperclip, MoreVertical, CheckCheck } from "lucide-react";
+import { apiFetch } from "../../api";
 
-const CONVERSATIONS = [
-  {
-    id: 1,
-    name: "Northbridge HR",
-    role: "Senior Frontend Engineer",
-    avatarColor: "#DBEAFE",
-    avatarText: "#2563EB",
-    lastMessage: "Great! We'd like to schedule an interview for next week.",
-    time: "10:24 AM",
-    unread: 2,
-    online: true,
-    messages: [
-      { id: 1, from: "them", text: "Hi Nowshin, thanks for applying to the Senior Frontend Engineer role!", time: "9:58 AM" },
-      { id: 2, from: "them", text: "We reviewed your profile and would love to move forward.", time: "10:00 AM" },
-      { id: 3, from: "me", text: "That's great to hear! I'm very interested in this opportunity.", time: "10:15 AM" },
-      { id: 4, from: "them", text: "Great! We'd like to schedule an interview for next week.", time: "10:24 AM" },
-    ],
-  },
-  {
-    id: 2,
-    name: "Chattogram Labs",
-    role: "Product Designer",
-    avatarColor: "#FCE7F3",
-    avatarText: "#BE185D",
-    lastMessage: "Could you share your portfolio link?",
-    time: "Yesterday",
-    unread: 0,
-    online: false,
-    messages: [
-      { id: 1, from: "them", text: "Hello! Thanks for your application for Product Designer.", time: "Yesterday, 3:10 PM" },
-      { id: 2, from: "them", text: "Could you share your portfolio link?", time: "Yesterday, 3:11 PM" },
-      { id: 3, from: "me", text: "Sure, sending it over shortly!", time: "Yesterday, 4:02 PM" },
-    ],
-  },
-  {
-    id: 3,
-    name: "CloudNine Recruiter",
-    role: "Backend Engineer (Node.js)",
-    avatarColor: "#D1FAE5",
-    avatarText: "#047857",
-    lastMessage: "You: Thank you, looking forward to it!",
-    time: "2 days ago",
-    unread: 0,
-    online: true,
-    messages: [
-      { id: 1, from: "them", text: "Your application has moved to the interview stage.", time: "2 days ago" },
-      { id: 2, from: "me", text: "Thank you, looking forward to it!", time: "2 days ago" },
-    ],
-  },
-  {
-    id: 4,
-    name: "NexGen Digital",
-    role: "UI/UX Designer",
-    avatarColor: "#FEF3C7",
-    avatarText: "#B45309",
-    lastMessage: "We'll get back to you by Friday.",
-    time: "1 week ago",
-    unread: 0,
-    online: false,
-    messages: [
-      { id: 1, from: "them", text: "Thanks for interviewing with us yesterday!", time: "1 week ago" },
-      { id: 2, from: "them", text: "We'll get back to you by Friday.", time: "1 week ago" },
-    ],
-  },
+const COLORS = [
+  ["#DBEAFE", "#2563EB"],
+  ["#FCE7F3", "#BE185D"],
+  ["#D1FAE5", "#047857"],
+  ["#FEF3C7", "#B45309"],
 ];
 
+function fmt(t) {
+  if (!t) return "";
+  const d = new Date(t);
+  const today = new Date();
+  return d.toDateString() === today.toDateString()
+    ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 export default function Messages() {
-  const [conversations, setConversations] = useState(CONVERSATIONS);
-  const [activeId, setActiveId] = useState(CONVERSATIONS[0].id);
+  const [conversations, setConversations] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [thread, setThread] = useState([]);
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
 
-  const active = conversations.find((c) => c.id === activeId);
+  async function loadList() {
+    try {
+      const items = await apiFetch("/api/messages");
+      setConversations(
+        items.map((c, i) => ({
+          ...c,
+          id: c.userId,
+          avatarColor: COLORS[i % COLORS.length][0],
+          avatarText: COLORS[i % COLORS.length][1],
+          time: fmt(c.time),
+          online: false,
+        }))
+      );
+      setActiveId((cur) => cur || (items[0] && items[0].userId) || null);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  useEffect(() => {
+    loadList();
+  }, []);
+
+  useEffect(() => {
+    if (!activeId) return;
+    let stop = false;
+    const load = () =>
+      apiFetch("/api/messages/" + activeId)
+        .then((m) => !stop && setThread(m.map((x) => ({ ...x, time: fmt(x.time) }))))
+        .catch((e) => setError(e.message));
+    load();
+    const timer = setInterval(load, 5000); // simple refresh for new messages
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [activeId]);
+
+  const base = conversations.find((c) => c.id === activeId);
+  const active = base ? { ...base, messages: thread } : null;
 
   const filteredConversations = conversations.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.role.toLowerCase().includes(search.toLowerCase())
+      (c.role || "").toLowerCase().includes(search.toLowerCase())
   );
 
   function selectConversation(id) {
     setActiveId(id);
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c))
-    );
+    setThread([]);
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
   }
 
-  function sendMessage() {
-    if (!draft.trim()) return;
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeId
-          ? {
-              ...c,
-              lastMessage: `You: ${draft}`,
-              time: "Just now",
-              messages: [
-                ...c.messages,
-                { id: Date.now(), from: "me", text: draft, time: "Just now" },
-              ],
-            }
-          : c
-      )
-    );
+  async function sendMessage() {
+    const text = draft.trim();
+    if (!text || !activeId) return;
     setDraft("");
+    try {
+      const m = await apiFetch("/api/messages", { method: "POST", body: { to: activeId, text } });
+      setThread((prev) => [...prev, { ...m, time: fmt(m.time) }]);
+      loadList();
+    } catch (e) {
+      setError(e.message);
+      setDraft(text);
+    }
   }
 
   function handleKeyDown(e) {
@@ -118,6 +103,7 @@ export default function Messages() {
       <p style={{ color: "#6B7280", marginBottom: "1.5rem" }}>
         Conversations with employers about your applications.
       </p>
+      {error && <p style={{ color: "#DC2626", marginBottom: "1rem" }}>{error}</p>}
 
       <div
         style={{
