@@ -247,6 +247,26 @@ if ($emp) {
 $r = Call "GET" "/api/messages" $null $null
 Check "messages need login -> 401" ($r.status -eq 401)
 
+Write-Host "`n== Live interview ==" -ForegroundColor Cyan
+$when = (Get-Date).ToUniversalTime().AddDays(2).ToString("yyyy-MM-ddTHH:mm:ssZ")
+$r = Call "POST" "/api/interviews" $seekTok @{ applicationId = $appId; scheduledAt = $when }
+Check "seeker cannot schedule -> 403" ($r.status -eq 403)
+$r = Call "POST" "/api/interviews" $empTok @{ applicationId = $appId; scheduledAt = "2000-01-01T10:00:00Z" }
+Check "past time -> 400" ($r.status -eq 400)
+$r = Call "POST" "/api/interviews" $empTok @{ applicationId = $appId; scheduledAt = $when; durationMin = 45; note = "Please be ready" }
+Check "employer schedules interview" (($r.status -eq 201 -or $r.status -eq 200) -and $r.data.meetingUrl -like "https://meet.jit.si/*")
+$ivId = $r.data._id
+$r = Call "GET" "/api/interviews/mine" $seekTok $null
+Check "seeker sees the interview + link" ($r.status -eq 200 -and (@($r.data) | Where-Object { $_._id -eq $ivId -and $_.meetingUrl }))
+$r = Call "GET" "/api/interviews/mine" $empTok $null
+Check "employer sees the interview" ($r.status -eq 200 -and (@($r.data) | Where-Object { $_._id -eq $ivId }))
+$r = Call "GET" "/api/notifications" $seekTok $null
+Check "seeker got a notification" ($r.status -eq 200 -and (@($r.data.items) | Where-Object { $_.text -like "*Interview scheduled*" }))
+$r = Call "PATCH" "/api/interviews/$ivId" $empTok @{ status = "Cancelled" }
+Check "employer cancels interview" ($r.status -eq 200 -and $r.data.status -eq "Cancelled")
+$r = Call "PATCH" "/api/interviews/$ivId" $seekTok @{ status = "Completed" }
+Check "seeker cannot edit interview -> 403" ($r.status -eq 403)
+
 Write-Host "`n== Clean up ==" -ForegroundColor Cyan
 $r = Call "DELETE" "/api/jobs/$createdJobId" $empTok $null
 Check "employer deletes the job" ($r.status -eq 200)

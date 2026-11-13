@@ -11,6 +11,7 @@ import savedRoutes from "./routes/saved.js";
 import notificationRoutes from "./routes/notifications.js";
 import statsRoutes from "./routes/stats.js";
 import messageRoutes from "./routes/messages.js";
+import interviewRoutes from "./routes/interviews.js";
 
 const app = express();
 app.use(cors());
@@ -26,6 +27,7 @@ app.use("/api/saved", savedRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/interviews", interviewRoutes);
 
 // One place that turns any error into a JSON message
 app.use((err, req, res, next) => {
